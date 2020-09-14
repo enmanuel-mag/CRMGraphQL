@@ -1,6 +1,7 @@
 const Usuario = require('../models/Usuario')
 const Cliente = require('../models/Cliente')
 const Producto = require('../models/Producto')
+const Pedido = require('../models/Pedido')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 require('dotenv').config({ path: 'variables.env' })
@@ -47,10 +48,13 @@ const crearToken = (usuario, secreta, expiresIn) => {
 //Resolver
 const resolvers = {
   Query: {
+    // USUARIOS
     obtenerUsuario: async (_, { token }) => {
       const usuarioID = await jwt.verify(token, process.env.SECRETA)
       return usuarioID
     },
+
+    // PRODUCTOS
     obtenerProductos: async () => {
       try {
         const productos = await Producto.find({})
@@ -68,6 +72,8 @@ const resolvers = {
 
       return producto
     },
+
+    // CLIENTES
     obtenerClientes: async () => {
       try {
         const clientes = await Cliente.find({})
@@ -99,6 +105,16 @@ const resolvers = {
       }
 
       return cliente
+    },
+
+    // PEDIDOS
+    obtenerPedidos: async () => {
+      try {
+        const pedidos = await Pedido.find({})
+        return pedidos
+      } catch (error) {
+        console.log(error)
+      }
     },
   },
   Mutation: {
@@ -228,6 +244,48 @@ const resolvers = {
       //Eliminar cliente
       await Cliente.findOneAndDelete({ _id: id })
       return 'Cliente eliminado'
+    },
+
+    // PEDIDOS
+    nuevoPedido: async (_, { input }, ctx) => {
+      const { cliente } = input
+
+      //Verificar si cliente eixste
+      let clienteExiste = await Cliente.findById(cliente)
+      if (!clienteExiste) {
+        throw new Error('Cliente no encontrado')
+      }
+
+      //Verificar si el cliente es del vendedor
+      if (clienteExiste.vendedor.toString() !== ctx.usuario.id) {
+        throw new Error('No tienes las credenciales')
+      }
+
+      //Revisar si el stock esta disponible
+      for await (const articulo of input.pedido) {
+        const { id } = articulo
+        const producto = await Producto.findById(id)
+
+        if (articulo.cantidad > producto.existencia) {
+          throw new Error(
+            `El articulo ${producto.nombre} excede la cantidad disponible`
+          )
+        } else {
+          //Restar la cantidad disponible
+          producto.existencia = producto.existencia - articulo.cantidad
+          await producto.save()
+        }
+      }
+
+      //Crear pedido
+      const nuevoPedido = new Pedido(input)
+
+      //Aisgnar vendedor
+      nuevoPedido.vendedor = ctx.usuario.id
+
+      //Guardarlo en la base de datos
+      const resultado = await nuevoPedido.save()
+      return resultado
     },
   },
 }
