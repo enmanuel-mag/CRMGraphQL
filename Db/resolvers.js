@@ -295,7 +295,7 @@ const resolvers = {
         console.log(error)
       }
     },
-    actualziarCliente: async (_, { id, input }, ctx) => {
+    actualizarCliente: async (_, { id, input }, ctx) => {
       //Revisar si el cleinte existe o no
       let cliente = await Cliente.findById(id)
       if (!cliente) {
